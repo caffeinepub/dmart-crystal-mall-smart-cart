@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   Banknote,
   CheckCircle2,
   ChevronRight,
@@ -1361,6 +1362,9 @@ function MyProductsSection({
   deleteProduct: (id: number) => void;
   setCart: React.Dispatch<React.SetStateAction<CartState>>;
 }) {
+  // Top-level panel mode: "add" = Add Product, "scan" = Scan for Checkout
+  const [panelMode, setPanelMode] = useState<"add" | "scan">("add");
+
   const [activeTab, setActiveTab] = useState<"camera" | "manual">("camera");
   const [barcodeInput, setBarcodeInput] = useState("");
   const [scanState, setScanState] = useState<"idle" | "scanning" | "ready">(
@@ -1383,6 +1387,22 @@ function MyProductsSection({
     category: string;
     barcode: string;
   }>({ name: "", price: "", category: "General", barcode: "" });
+
+  // Scan for checkout state
+  const [checkoutScanTab, setCheckoutScanTab] = useState<"camera" | "manual">(
+    "camera",
+  );
+  const [checkoutScanState, setCheckoutScanState] = useState<
+    "idle" | "scanning" | "ready"
+  >("idle");
+  const [checkoutBarcodeInput, setCheckoutBarcodeInput] = useState("");
+  const [checkoutScanResult, setCheckoutScanResult] = useState<{
+    found: boolean;
+    product?: MyProduct;
+    addedToCart: boolean;
+  } | null>(null);
+  const [lastScannedForCheckout, setLastScannedForCheckout] =
+    useState<MyProduct | null>(null);
 
   const sectionRef = useRef<HTMLElement>(null);
 
@@ -1514,6 +1534,66 @@ function MyProductsSection({
     },
     [setCart],
   );
+
+  const handleCheckoutScanBarcode = useCallback(
+    (barcode: string) => {
+      const found = portfolioProducts.find((p) => p.barcode === barcode);
+      if (found) {
+        setCheckoutScanResult({
+          found: true,
+          product: found,
+          addedToCart: false,
+        });
+        setLastScannedForCheckout(found);
+        setCart((prev) => {
+          if (prev[found.id]) {
+            return {
+              ...prev,
+              [found.id]: {
+                product: found,
+                quantity: prev[found.id].quantity + 1,
+              },
+            };
+          }
+          return { ...prev, [found.id]: { product: found, quantity: 1 } };
+        });
+        setCheckoutScanResult({
+          found: true,
+          product: found,
+          addedToCart: true,
+        });
+        playBeep();
+      } else {
+        setCheckoutScanResult({ found: false, addedToCart: false });
+      }
+      setTimeout(() => setCheckoutScanResult(null), 3000);
+    },
+    [portfolioProducts, setCart],
+  );
+
+  const doCheckoutScan = useCallback(() => {
+    if (checkoutScanState === "scanning") return;
+    if (portfolioProducts.length === 0) {
+      setCheckoutScanResult({ found: false, addedToCart: false });
+      setTimeout(() => setCheckoutScanResult(null), 3000);
+      return;
+    }
+    setCheckoutScanState("scanning");
+    setTimeout(() => {
+      const randomProduct =
+        portfolioProducts[Math.floor(Math.random() * portfolioProducts.length)];
+      setCheckoutScanState("ready");
+      handleCheckoutScanBarcode(randomProduct.barcode);
+      setTimeout(() => setCheckoutScanState("idle"), 800);
+    }, 1500);
+  }, [checkoutScanState, portfolioProducts, handleCheckoutScanBarcode]);
+
+  const handleCheckoutManualAdd = useCallback(() => {
+    const trimmed = checkoutBarcodeInput.trim();
+    if (!trimmed) return;
+    handleCheckoutScanBarcode(trimmed);
+    setCheckoutBarcodeInput("");
+  }, [checkoutBarcodeInput, handleCheckoutScanBarcode]);
 
   const startEdit = useCallback((product: MyProduct) => {
     setEditingId(product.id);
@@ -1734,7 +1814,7 @@ function MyProductsSection({
           }}
           className="mp-grid"
         >
-          {/* ===== LEFT PANEL: Add Product ===== */}
+          {/* ===== LEFT PANEL: Add Product / Scan for Checkout ===== */}
           <div
             className="reveal"
             style={{
@@ -1751,7 +1831,7 @@ function MyProductsSection({
                 display: "flex",
                 alignItems: "center",
                 gap: "10px",
-                marginBottom: "1.5rem",
+                marginBottom: "1.25rem",
               }}
             >
               <div
@@ -1774,56 +1854,137 @@ function MyProductsSection({
                   letterSpacing: "-0.01em",
                 }}
               >
-                Add Product
+                {panelMode === "add" ? "Add Product" : "Scan for Checkout"}
               </span>
             </div>
 
-            {/* Tab Toggle */}
+            {/* Top-level Mode Toggle */}
             <div
               style={{
                 display: "flex",
-                background: "oklch(0.08 0.04 152 / 0.6)",
-                borderRadius: "12px",
+                background: "oklch(0.06 0.03 152 / 0.7)",
+                borderRadius: "14px",
                 padding: "4px",
-                marginBottom: "1.5rem",
+                marginBottom: "1.25rem",
                 gap: "4px",
+                border: "1px solid oklch(0.42 0.13 152 / 0.3)",
               }}
             >
-              {(["camera", "manual"] as const).map((tab) => (
+              {(
+                [
+                  { key: "add", label: "➕ Add Product" },
+                  { key: "scan", label: "🛒 Scan for Checkout" },
+                ] as const
+              ).map(({ key, label }) => (
                 <button
                   type="button"
-                  key={tab}
-                  onClick={() => {
-                    setActiveTab(tab);
-                    setScanState("idle");
-                  }}
-                  data-ocid="portfolio.tab"
+                  key={key}
+                  onClick={() => setPanelMode(key)}
+                  data-ocid="checkout_scan.tab"
                   style={{
                     flex: 1,
-                    padding: "9px 14px",
-                    borderRadius: "8px",
+                    padding: "10px 10px",
+                    borderRadius: "10px",
                     border: "none",
                     background:
-                      activeTab === tab
-                        ? "oklch(0.42 0.13 152)"
+                      panelMode === key
+                        ? panelMode === "scan"
+                          ? "linear-gradient(135deg, oklch(0.42 0.13 152), oklch(0.35 0.14 152))"
+                          : "oklch(0.42 0.13 152)"
                         : "transparent",
                     color:
-                      activeTab === tab ? "white" : "rgba(255,255,255,0.5)",
+                      panelMode === key ? "white" : "rgba(255,255,255,0.45)",
                     fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-                    fontSize: "0.82rem",
+                    fontSize: "0.78rem",
                     fontWeight: 700,
                     cursor: "pointer",
                     transition: "background 0.2s, color 0.2s",
+                    boxShadow:
+                      panelMode === key
+                        ? "0 4px 12px oklch(0.42 0.13 152 / 0.4)"
+                        : "none",
                   }}
                 >
-                  {tab === "camera" ? "📷 Camera Scan" : "⌨️ Enter Barcode"}
+                  {label}
                 </button>
               ))}
             </div>
 
-            {/* ===== CAMERA TAB ===== */}
-            {activeTab === "camera" && (
+            {/* ===== SCAN FOR CHECKOUT MODE ===== */}
+            {panelMode === "scan" && (
               <div>
+                {/* Scan for checkout intro */}
+                <div
+                  style={{
+                    background: "oklch(0.82 0.18 86 / 0.1)",
+                    border: "1px solid oklch(0.82 0.18 86 / 0.3)",
+                    borderRadius: "10px",
+                    padding: "10px 14px",
+                    marginBottom: "1.25rem",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                  }}
+                >
+                  <ShoppingCart
+                    size={15}
+                    color="oklch(0.82 0.18 86)"
+                    style={{ flexShrink: 0 }}
+                  />
+                  <span
+                    style={{
+                      fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                      fontSize: "0.75rem",
+                      color: "rgba(255,255,255,0.7)",
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    Scan products from your portfolio to add them to cart
+                  </span>
+                </div>
+
+                {/* Camera/Manual sub-tab */}
+                <div
+                  style={{
+                    display: "flex",
+                    background: "oklch(0.08 0.04 152 / 0.6)",
+                    borderRadius: "12px",
+                    padding: "4px",
+                    marginBottom: "1.25rem",
+                    gap: "4px",
+                  }}
+                >
+                  {(["camera", "manual"] as const).map((tab) => (
+                    <button
+                      type="button"
+                      key={tab}
+                      onClick={() => setCheckoutScanTab(tab)}
+                      style={{
+                        flex: 1,
+                        padding: "8px 12px",
+                        borderRadius: "8px",
+                        border: "none",
+                        background:
+                          checkoutScanTab === tab
+                            ? "oklch(0.42 0.13 152)"
+                            : "transparent",
+                        color:
+                          checkoutScanTab === tab
+                            ? "white"
+                            : "rgba(255,255,255,0.45)",
+                        fontFamily:
+                          "'Plus Jakarta Sans', system-ui, sans-serif",
+                        fontSize: "0.78rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        transition: "background 0.2s, color 0.2s",
+                      }}
+                    >
+                      {tab === "camera" ? "📷 Camera" : "⌨️ Manual"}
+                    </button>
+                  ))}
+                </div>
+
                 {/* Camera viewfinder */}
                 <div
                   style={{
@@ -1901,9 +2062,9 @@ function MyProductsSection({
                       }}
                     >
                       <div
-                        className={`scan-beam ${scanState === "scanning" ? "scan-beam-fast" : ""}`}
+                        className={`scan-beam ${checkoutScanState === "scanning" ? "scan-beam-fast" : ""}`}
                         style={
-                          scanState === "scanning"
+                          checkoutScanState === "scanning"
                             ? {
                                 background:
                                   "linear-gradient(90deg, transparent, oklch(0.82 0.18 86), oklch(1 0 0 / 0.6), oklch(0.82 0.18 86), transparent)",
@@ -1925,95 +2086,108 @@ function MyProductsSection({
                             "'Plus Jakarta Sans', system-ui, sans-serif",
                           fontSize: "0.82rem",
                           color:
-                            scanState === "scanning"
+                            checkoutScanState === "scanning"
                               ? "oklch(0.82 0.18 86)"
                               : "rgba(255,255,255,0.35)",
                           letterSpacing: "0.06em",
                           textTransform: "uppercase",
-                          fontWeight: scanState === "scanning" ? 700 : 400,
+                          fontWeight:
+                            checkoutScanState === "scanning" ? 700 : 400,
                         }}
                       >
-                        {scanState === "scanning"
+                        {checkoutScanState === "scanning"
                           ? "⟳ Scanning..."
-                          : scanState === "ready"
-                            ? "✓ Barcode captured"
-                            : "Aim camera at barcode"}
+                          : checkoutScanState === "ready"
+                            ? "✓ Scanned!"
+                            : portfolioProducts.length === 0
+                              ? "No products in portfolio"
+                              : "Aim camera at product barcode"}
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* Camera controls */}
-                <div
-                  style={{ display: "flex", gap: "8px", marginBottom: "1rem" }}
-                >
-                  <button
-                    type="button"
-                    onClick={startCamera}
-                    disabled={
-                      cameraActive || cameraLoading || cameraSupported === false
-                    }
+                {/* Camera controls (only in camera tab) */}
+                {checkoutScanTab === "camera" && (
+                  <div
                     style={{
-                      flex: 1,
-                      padding: "8px 12px",
-                      borderRadius: "8px",
-                      border: "1px solid oklch(0.42 0.13 152 / 0.4)",
-                      background:
-                        cameraActive ||
-                        cameraLoading ||
-                        cameraSupported === false
-                          ? "oklch(0.42 0.13 152 / 0.1)"
-                          : "oklch(0.42 0.13 152 / 0.25)",
-                      color:
-                        cameraActive ||
-                        cameraLoading ||
-                        cameraSupported === false
-                          ? "rgba(255,255,255,0.3)"
-                          : "oklch(0.82 0.18 86)",
-                      fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      cursor:
-                        cameraActive ||
-                        cameraLoading ||
-                        cameraSupported === false
-                          ? "not-allowed"
-                          : "pointer",
+                      display: "flex",
+                      gap: "8px",
+                      marginBottom: "1rem",
                     }}
                   >
-                    📷 {cameraLoading ? "Starting..." : "Start Camera"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={stopCamera}
-                    disabled={!cameraActive || cameraLoading}
-                    style={{
-                      flex: 1,
-                      padding: "8px 12px",
-                      borderRadius: "8px",
-                      border: "1px solid oklch(0.577 0.245 27.325 / 0.3)",
-                      background:
-                        !cameraActive || cameraLoading
-                          ? "oklch(0.577 0.245 27.325 / 0.05)"
-                          : "oklch(0.577 0.245 27.325 / 0.15)",
-                      color:
-                        !cameraActive || cameraLoading
-                          ? "rgba(255,255,255,0.3)"
-                          : "oklch(0.7 0.2 27.325)",
-                      fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      cursor:
-                        !cameraActive || cameraLoading
-                          ? "not-allowed"
-                          : "pointer",
-                    }}
-                  >
-                    ⏹ Stop Camera
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      onClick={startCamera}
+                      disabled={
+                        cameraActive ||
+                        cameraLoading ||
+                        cameraSupported === false
+                      }
+                      style={{
+                        flex: 1,
+                        padding: "8px 12px",
+                        borderRadius: "8px",
+                        border: "1px solid oklch(0.42 0.13 152 / 0.4)",
+                        background:
+                          cameraActive ||
+                          cameraLoading ||
+                          cameraSupported === false
+                            ? "oklch(0.42 0.13 152 / 0.1)"
+                            : "oklch(0.42 0.13 152 / 0.25)",
+                        color:
+                          cameraActive ||
+                          cameraLoading ||
+                          cameraSupported === false
+                            ? "rgba(255,255,255,0.3)"
+                            : "oklch(0.82 0.18 86)",
+                        fontFamily:
+                          "'Plus Jakarta Sans', system-ui, sans-serif",
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        cursor:
+                          cameraActive ||
+                          cameraLoading ||
+                          cameraSupported === false
+                            ? "not-allowed"
+                            : "pointer",
+                      }}
+                    >
+                      📷 {cameraLoading ? "Starting..." : "Start Camera"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={stopCamera}
+                      disabled={!cameraActive || cameraLoading}
+                      style={{
+                        flex: 1,
+                        padding: "8px 12px",
+                        borderRadius: "8px",
+                        border: "1px solid oklch(0.577 0.245 27.325 / 0.3)",
+                        background:
+                          !cameraActive || cameraLoading
+                            ? "oklch(0.577 0.245 27.325 / 0.05)"
+                            : "oklch(0.577 0.245 27.325 / 0.15)",
+                        color:
+                          !cameraActive || cameraLoading
+                            ? "rgba(255,255,255,0.3)"
+                            : "oklch(0.7 0.2 27.325)",
+                        fontFamily:
+                          "'Plus Jakarta Sans', system-ui, sans-serif",
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        cursor:
+                          !cameraActive || cameraLoading
+                            ? "not-allowed"
+                            : "pointer",
+                      }}
+                    >
+                      ⏹ Stop Camera
+                    </button>
+                  </div>
+                )}
 
-                {cameraError && (
+                {cameraError && checkoutScanTab === "camera" && (
                   <div
                     style={{
                       marginBottom: "0.75rem",
@@ -2031,465 +2205,1088 @@ function MyProductsSection({
                 )}
 
                 {/* Scan button */}
-                <button
-                  type="button"
-                  onClick={doScan}
-                  disabled={scanState === "scanning"}
-                  data-ocid="portfolio.primary_button"
-                  style={{
-                    width: "100%",
-                    padding: "12px",
-                    borderRadius: "12px",
-                    border: "none",
-                    background:
-                      scanState === "scanning"
-                        ? "oklch(0.42 0.13 152 / 0.5)"
-                        : "linear-gradient(135deg, oklch(0.42 0.13 152), oklch(0.32 0.11 152))",
-                    color: "white",
-                    fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-                    fontSize: "0.9rem",
-                    fontWeight: 700,
-                    cursor:
-                      scanState === "scanning" ? "not-allowed" : "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "8px",
-                    transition: "transform 0.2s, box-shadow 0.2s",
-                    marginBottom: "1rem",
-                  }}
-                >
-                  {scanState === "scanning" ? (
-                    <>
-                      <span
-                        style={{
-                          animation: "spin 1s linear infinite",
-                          display: "inline-block",
-                        }}
-                      >
-                        ⟳
-                      </span>
-                      Scanning...
-                    </>
-                  ) : (
-                    <>
-                      <QrCode size={16} />
-                      Scan Product Barcode
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
-
-            {/* ===== MANUAL BARCODE TAB ===== */}
-            {activeTab === "manual" && (
-              <div style={{ marginBottom: "1rem" }}>
-                <label
-                  htmlFor="mp-barcode-input"
-                  style={{
-                    fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-                    fontSize: "0.78rem",
-                    fontWeight: 600,
-                    color: "rgba(255,255,255,0.6)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.05em",
-                    display: "block",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Barcode Number
-                </label>
-                <input
-                  id="mp-barcode-input"
-                  type="text"
-                  value={barcodeInput}
-                  onChange={(e) => setBarcodeInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleBarcodeEntry();
-                  }}
-                  placeholder="e.g. 8901030814052"
-                  data-ocid="portfolio.input"
-                  style={inputStyle}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = "oklch(0.82 0.18 86)";
-                    e.target.style.boxShadow =
-                      "0 0 0 3px oklch(0.82 0.18 86 / 0.15)";
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = "oklch(0.42 0.13 152 / 0.4)";
-                    e.target.style.boxShadow = "none";
-                  }}
-                />
-                <p
-                  style={{
-                    fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-                    fontSize: "0.72rem",
-                    color: "rgba(255,255,255,0.35)",
-                    marginTop: "4px",
-                    marginBottom: "0.75rem",
-                  }}
-                >
-                  Try: 8901030814052 · 8906063010012 · or any custom barcode
-                </p>
-                <button
-                  type="button"
-                  onClick={handleBarcodeEntry}
-                  data-ocid="portfolio.primary_button"
-                  style={{
-                    width: "100%",
-                    padding: "12px",
-                    borderRadius: "12px",
-                    border: "none",
-                    background:
-                      "linear-gradient(135deg, oklch(0.42 0.13 152), oklch(0.32 0.11 152))",
-                    color: "white",
-                    fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-                    fontSize: "0.9rem",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "8px",
-                    marginBottom: "1rem",
-                    transition: "transform 0.2s",
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.transform =
-                      "translateY(-2px)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.transform =
-                      "translateY(0)";
-                  }}
-                >
-                  <QrCode size={16} />
-                  Look Up Barcode
-                </button>
-              </div>
-            )}
-
-            {/* ===== PRODUCT DETAILS FORM (shown after scan/barcode entry) ===== */}
-            {(scanState === "ready" || addForm.barcode) && (
-              <div
-                style={{
-                  background: "white",
-                  borderRadius: "16px",
-                  padding: "1.25rem",
-                  border: "1.5px solid oklch(0.88 0.015 145)",
-                  animation: "slideInUp 0.3s ease-out",
-                }}
-              >
-                <h4
-                  style={{
-                    fontFamily: "'Mona Sans', system-ui, sans-serif",
-                    fontSize: "0.95rem",
-                    fontWeight: 800,
-                    color: "oklch(0.16 0.07 152)",
-                    marginBottom: "1rem",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                  }}
-                >
-                  <Package size={16} color="oklch(0.42 0.13 152)" />
-                  Product Details
-                </h4>
-
-                {/* Product Name */}
-                <div style={{ marginBottom: "0.75rem" }}>
-                  <label
-                    htmlFor="mp-add-name"
+                {checkoutScanTab === "camera" && (
+                  <button
+                    type="button"
+                    onClick={doCheckoutScan}
+                    disabled={
+                      checkoutScanState === "scanning" ||
+                      portfolioProducts.length === 0
+                    }
+                    data-ocid="checkout_scan.primary_button"
                     style={{
+                      width: "100%",
+                      padding: "12px",
+                      borderRadius: "12px",
+                      border: "none",
+                      background:
+                        checkoutScanState === "scanning" ||
+                        portfolioProducts.length === 0
+                          ? "oklch(0.42 0.13 152 / 0.4)"
+                          : "linear-gradient(135deg, oklch(0.42 0.13 152), oklch(0.32 0.11 152))",
+                      color:
+                        checkoutScanState === "scanning" ||
+                        portfolioProducts.length === 0
+                          ? "rgba(255,255,255,0.5)"
+                          : "white",
                       fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-                      fontSize: "0.74rem",
-                      fontWeight: 600,
-                      color: "oklch(0.45 0.02 260)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.05em",
-                      display: "block",
-                      marginBottom: "5px",
+                      fontSize: "0.9rem",
+                      fontWeight: 700,
+                      cursor:
+                        checkoutScanState === "scanning" ||
+                        portfolioProducts.length === 0
+                          ? "not-allowed"
+                          : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "8px",
+                      marginBottom: "1rem",
                     }}
                   >
-                    Product Name *
-                  </label>
-                  <input
-                    id="mp-add-name"
-                    type="text"
-                    value={addForm.name}
-                    onChange={(e) =>
-                      setAddForm((f) => ({ ...f, name: e.target.value }))
-                    }
-                    placeholder="e.g. Organic Honey 500g"
-                    data-ocid="portfolio.input"
-                    style={lightInputStyle}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = "oklch(0.42 0.13 152)";
-                      e.target.style.boxShadow =
-                        "0 0 0 3px oklch(0.42 0.13 152 / 0.12)";
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = "oklch(0.88 0.015 145)";
-                      e.target.style.boxShadow = "none";
-                    }}
-                  />
-                </div>
+                    {checkoutScanState === "scanning" ? (
+                      <>
+                        <span
+                          style={{
+                            animation: "spin 1s linear infinite",
+                            display: "inline-block",
+                          }}
+                        >
+                          ⟳
+                        </span>
+                        Scanning...
+                      </>
+                    ) : (
+                      <>
+                        <QrCode size={16} />
+                        Scan Product
+                      </>
+                    )}
+                  </button>
+                )}
 
-                {/* Price + Category */}
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "10px",
-                    marginBottom: "0.75rem",
-                  }}
-                >
-                  <div>
+                {/* Manual barcode input */}
+                {checkoutScanTab === "manual" && (
+                  <div style={{ marginBottom: "1rem" }}>
                     <label
-                      htmlFor="mp-add-price"
+                      htmlFor="checkout-scan-barcode"
                       style={{
                         fontFamily:
                           "'Plus Jakarta Sans', system-ui, sans-serif",
-                        fontSize: "0.74rem",
+                        fontSize: "0.78rem",
                         fontWeight: 600,
-                        color: "oklch(0.45 0.02 260)",
+                        color: "rgba(255,255,255,0.6)",
                         textTransform: "uppercase",
                         letterSpacing: "0.05em",
                         display: "block",
-                        marginBottom: "5px",
+                        marginBottom: "6px",
                       }}
                     >
-                      Price ₹ *
+                      Product Barcode
+                    </label>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <input
+                        id="checkout-scan-barcode"
+                        type="text"
+                        value={checkoutBarcodeInput}
+                        onChange={(e) =>
+                          setCheckoutBarcodeInput(e.target.value)
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleCheckoutManualAdd();
+                        }}
+                        placeholder="Enter barcode number"
+                        data-ocid="checkout_scan.input"
+                        style={{
+                          flex: 1,
+                          border: "1.5px solid oklch(0.42 0.13 152 / 0.4)",
+                          borderRadius: "10px",
+                          padding: "11px 14px",
+                          background: "oklch(0.10 0.05 152 / 0.8)",
+                          fontFamily:
+                            "'Plus Jakarta Sans', system-ui, sans-serif",
+                          fontSize: "0.9rem",
+                          color: "white",
+                          outline: "none",
+                          transition: "border-color 0.2s, box-shadow 0.2s",
+                        }}
+                        onFocus={(e) => {
+                          e.target.style.borderColor = "oklch(0.82 0.18 86)";
+                          e.target.style.boxShadow =
+                            "0 0 0 3px oklch(0.82 0.18 86 / 0.15)";
+                        }}
+                        onBlur={(e) => {
+                          e.target.style.borderColor =
+                            "oklch(0.42 0.13 152 / 0.4)";
+                          e.target.style.boxShadow = "none";
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCheckoutManualAdd}
+                        disabled={!checkoutBarcodeInput.trim()}
+                        data-ocid="checkout_scan.add_button"
+                        style={{
+                          padding: "11px 16px",
+                          borderRadius: "10px",
+                          border: "none",
+                          background: !checkoutBarcodeInput.trim()
+                            ? "oklch(0.42 0.13 152 / 0.3)"
+                            : "oklch(0.82 0.18 86)",
+                          color: !checkoutBarcodeInput.trim()
+                            ? "rgba(255,255,255,0.3)"
+                            : "oklch(0.16 0.07 152)",
+                          fontFamily:
+                            "'Plus Jakarta Sans', system-ui, sans-serif",
+                          fontSize: "0.82rem",
+                          fontWeight: 700,
+                          cursor: !checkoutBarcodeInput.trim()
+                            ? "not-allowed"
+                            : "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "5px",
+                          flexShrink: 0,
+                          transition: "background 0.2s",
+                        }}
+                      >
+                        <ShoppingCart size={14} />
+                        Add
+                      </button>
+                    </div>
+                    <p
+                      style={{
+                        fontFamily:
+                          "'Plus Jakarta Sans', system-ui, sans-serif",
+                        fontSize: "0.72rem",
+                        color: "rgba(255,255,255,0.35)",
+                        marginTop: "6px",
+                      }}
+                    >
+                      Enter a barcode from your saved portfolio products
+                    </p>
+                  </div>
+                )}
+
+                {/* Scan result feedback */}
+                {checkoutScanResult !== null &&
+                  (checkoutScanResult.found && checkoutScanResult.product ? (
+                    <div
+                      data-ocid="checkout_scan.success_state"
+                      style={{
+                        background: "oklch(0.35 0.12 152 / 0.5)",
+                        border: "1.5px solid oklch(0.55 0.15 152)",
+                        borderRadius: "12px",
+                        padding: "12px 16px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "12px",
+                        animation: "slideInUp 0.3s ease-out",
+                        marginBottom: "0.75rem",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: "36px",
+                          height: "36px",
+                          borderRadius: "50%",
+                          background: "oklch(0.55 0.15 152 / 0.3)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <CheckCircle2 size={18} color="oklch(0.82 0.18 86)" />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontFamily:
+                              "'Plus Jakarta Sans', system-ui, sans-serif",
+                            fontSize: "0.85rem",
+                            fontWeight: 700,
+                            color: "white",
+                            marginBottom: "2px",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {checkoutScanResult.product.name}
+                        </div>
+                        <div
+                          style={{
+                            fontFamily:
+                              "'Plus Jakarta Sans', system-ui, sans-serif",
+                            fontSize: "0.75rem",
+                            color: "oklch(0.82 0.18 86)",
+                            fontWeight: 600,
+                          }}
+                        >
+                          ✅ Added to Cart! —{" "}
+                          {formatCurrency(checkoutScanResult.product.price)}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      data-ocid="checkout_scan.error_state"
+                      style={{
+                        background: "oklch(0.55 0.15 50 / 0.15)",
+                        border: "1.5px solid oklch(0.7 0.18 60 / 0.6)",
+                        borderRadius: "12px",
+                        padding: "12px 16px",
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: "10px",
+                        animation: "slideInUp 0.3s ease-out",
+                        marginBottom: "0.75rem",
+                      }}
+                    >
+                      <AlertTriangle
+                        size={16}
+                        color="oklch(0.7 0.18 60)"
+                        style={{ flexShrink: 0, marginTop: "2px" }}
+                      />
+                      <span
+                        style={{
+                          fontFamily:
+                            "'Plus Jakarta Sans', system-ui, sans-serif",
+                          fontSize: "0.8rem",
+                          color: "oklch(0.85 0.1 60)",
+                          lineHeight: 1.45,
+                        }}
+                      >
+                        {portfolioProducts.length === 0
+                          ? "No products in portfolio to scan. Please add products first."
+                          : "Product not found in your portfolio. Please add it first."}
+                      </span>
+                    </div>
+                  ))}
+
+                {/* Last scanned product */}
+                {lastScannedForCheckout && !checkoutScanResult && (
+                  <div
+                    style={{
+                      background: "oklch(0.42 0.13 152 / 0.2)",
+                      border: "1px solid oklch(0.42 0.13 152 / 0.4)",
+                      borderRadius: "12px",
+                      padding: "12px 14px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                    }}
+                  >
+                    <span style={{ fontSize: "1.4rem", flexShrink: 0 }}>
+                      {lastScannedForCheckout.icon}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontFamily:
+                            "'Plus Jakarta Sans', system-ui, sans-serif",
+                          fontSize: "0.8rem",
+                          fontWeight: 700,
+                          color: "white",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          marginBottom: "2px",
+                        }}
+                      >
+                        {lastScannedForCheckout.name}
+                      </div>
+                      <div
+                        style={{
+                          fontFamily:
+                            "'Plus Jakarta Sans', system-ui, sans-serif",
+                          fontSize: "0.7rem",
+                          color: "rgba(255,255,255,0.5)",
+                        }}
+                      >
+                        Last scanned ·{" "}
+                        {formatCurrency(lastScannedForCheckout.price)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Prompt when idle with empty portfolio */}
+                {portfolioProducts.length === 0 && !checkoutScanResult && (
+                  <div
+                    style={{
+                      marginTop: "0.5rem",
+                      padding: "14px",
+                      borderRadius: "12px",
+                      border: "1px dashed oklch(0.42 0.13 152 / 0.35)",
+                      background: "oklch(0.42 0.13 152 / 0.06)",
+                      textAlign: "center",
+                    }}
+                  >
+                    <p
+                      style={{
+                        fontFamily:
+                          "'Plus Jakarta Sans', system-ui, sans-serif",
+                        fontSize: "0.8rem",
+                        color: "rgba(255,255,255,0.4)",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      Switch to "Add Product" to save products to your portfolio
+                      first, then scan them here for checkout.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ===== ADD PRODUCT MODE ===== */}
+            {panelMode === "add" && (
+              <>
+                {/* Tab Toggle */}
+                <div
+                  style={{
+                    display: "flex",
+                    background: "oklch(0.08 0.04 152 / 0.6)",
+                    borderRadius: "12px",
+                    padding: "4px",
+                    marginBottom: "1.5rem",
+                    gap: "4px",
+                  }}
+                >
+                  {(["camera", "manual"] as const).map((tab) => (
+                    <button
+                      type="button"
+                      key={tab}
+                      onClick={() => {
+                        setActiveTab(tab);
+                        setScanState("idle");
+                      }}
+                      data-ocid="portfolio.tab"
+                      style={{
+                        flex: 1,
+                        padding: "9px 14px",
+                        borderRadius: "8px",
+                        border: "none",
+                        background:
+                          activeTab === tab
+                            ? "oklch(0.42 0.13 152)"
+                            : "transparent",
+                        color:
+                          activeTab === tab ? "white" : "rgba(255,255,255,0.5)",
+                        fontFamily:
+                          "'Plus Jakarta Sans', system-ui, sans-serif",
+                        fontSize: "0.82rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        transition: "background 0.2s, color 0.2s",
+                      }}
+                    >
+                      {tab === "camera" ? "📷 Camera Scan" : "⌨️ Enter Barcode"}
+                    </button>
+                  ))}
+                </div>
+
+                {/* ===== CAMERA TAB ===== */}
+                {activeTab === "camera" && (
+                  <div>
+                    {/* Camera viewfinder */}
+                    <div
+                      style={{
+                        border: "2px solid oklch(0.42 0.13 152 / 0.4)",
+                        borderRadius: "12px",
+                        position: "relative",
+                        overflow: "hidden",
+                        background: "oklch(0.08 0.04 152 / 0.5)",
+                        marginBottom: "0.75rem",
+                      }}
+                    >
+                      {/* Corner brackets */}
+                      {[
+                        {
+                          top: "6px",
+                          left: "6px",
+                          borderRight: "none",
+                          borderBottom: "none",
+                        },
+                        {
+                          top: "6px",
+                          right: "6px",
+                          borderLeft: "none",
+                          borderBottom: "none",
+                        },
+                        {
+                          bottom: "6px",
+                          left: "6px",
+                          borderRight: "none",
+                          borderTop: "none",
+                        },
+                        {
+                          bottom: "6px",
+                          right: "6px",
+                          borderLeft: "none",
+                          borderTop: "none",
+                        },
+                      ].map((s, i) => (
+                        <div
+                          // biome-ignore lint/suspicious/noArrayIndexKey: static decorative corners
+                          key={i}
+                          style={{
+                            position: "absolute",
+                            width: "18px",
+                            height: "18px",
+                            border: "2.5px solid oklch(0.82 0.18 86)",
+                            zIndex: 2,
+                            ...s,
+                          }}
+                        />
+                      ))}
+
+                      {/* Video feed */}
+                      <video
+                        ref={videoRef}
+                        playsInline
+                        muted
+                        style={{
+                          width: "100%",
+                          height: "110px",
+                          objectFit: "cover",
+                          borderRadius: "8px",
+                          display: cameraActive ? "block" : "none",
+                        }}
+                      />
+                      <canvas ref={canvasRef} style={{ display: "none" }} />
+
+                      {/* Static window when camera off */}
+                      {!cameraActive && (
+                        <div
+                          style={{
+                            height: "110px",
+                            position: "relative",
+                            overflow: "hidden",
+                          }}
+                        >
+                          <div
+                            className={`scan-beam ${scanState === "scanning" ? "scan-beam-fast" : ""}`}
+                            style={
+                              scanState === "scanning"
+                                ? {
+                                    background:
+                                      "linear-gradient(90deg, transparent, oklch(0.82 0.18 86), oklch(1 0 0 / 0.6), oklch(0.82 0.18 86), transparent)",
+                                    boxShadow:
+                                      "0 0 20px oklch(0.82 0.18 86), 0 0 40px oklch(0.82 0.18 86 / 0.5)",
+                                    animationDuration: "0.25s",
+                                  }
+                                : {}
+                            }
+                          />
+                          <div
+                            style={{
+                              position: "absolute",
+                              inset: 0,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontFamily:
+                                "'Plus Jakarta Sans', system-ui, sans-serif",
+                              fontSize: "0.82rem",
+                              color:
+                                scanState === "scanning"
+                                  ? "oklch(0.82 0.18 86)"
+                                  : "rgba(255,255,255,0.35)",
+                              letterSpacing: "0.06em",
+                              textTransform: "uppercase",
+                              fontWeight: scanState === "scanning" ? 700 : 400,
+                            }}
+                          >
+                            {scanState === "scanning"
+                              ? "⟳ Scanning..."
+                              : scanState === "ready"
+                                ? "✓ Barcode captured"
+                                : "Aim camera at barcode"}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Camera controls */}
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "8px",
+                        marginBottom: "1rem",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={startCamera}
+                        disabled={
+                          cameraActive ||
+                          cameraLoading ||
+                          cameraSupported === false
+                        }
+                        style={{
+                          flex: 1,
+                          padding: "8px 12px",
+                          borderRadius: "8px",
+                          border: "1px solid oklch(0.42 0.13 152 / 0.4)",
+                          background:
+                            cameraActive ||
+                            cameraLoading ||
+                            cameraSupported === false
+                              ? "oklch(0.42 0.13 152 / 0.1)"
+                              : "oklch(0.42 0.13 152 / 0.25)",
+                          color:
+                            cameraActive ||
+                            cameraLoading ||
+                            cameraSupported === false
+                              ? "rgba(255,255,255,0.3)"
+                              : "oklch(0.82 0.18 86)",
+                          fontFamily:
+                            "'Plus Jakarta Sans', system-ui, sans-serif",
+                          fontSize: "0.75rem",
+                          fontWeight: 700,
+                          cursor:
+                            cameraActive ||
+                            cameraLoading ||
+                            cameraSupported === false
+                              ? "not-allowed"
+                              : "pointer",
+                        }}
+                      >
+                        📷 {cameraLoading ? "Starting..." : "Start Camera"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={stopCamera}
+                        disabled={!cameraActive || cameraLoading}
+                        style={{
+                          flex: 1,
+                          padding: "8px 12px",
+                          borderRadius: "8px",
+                          border: "1px solid oklch(0.577 0.245 27.325 / 0.3)",
+                          background:
+                            !cameraActive || cameraLoading
+                              ? "oklch(0.577 0.245 27.325 / 0.05)"
+                              : "oklch(0.577 0.245 27.325 / 0.15)",
+                          color:
+                            !cameraActive || cameraLoading
+                              ? "rgba(255,255,255,0.3)"
+                              : "oklch(0.7 0.2 27.325)",
+                          fontFamily:
+                            "'Plus Jakarta Sans', system-ui, sans-serif",
+                          fontSize: "0.75rem",
+                          fontWeight: 700,
+                          cursor:
+                            !cameraActive || cameraLoading
+                              ? "not-allowed"
+                              : "pointer",
+                        }}
+                      >
+                        ⏹ Stop Camera
+                      </button>
+                    </div>
+
+                    {cameraError && (
+                      <div
+                        style={{
+                          marginBottom: "0.75rem",
+                          padding: "8px 12px",
+                          borderRadius: "8px",
+                          background: "oklch(0.577 0.245 27.325 / 0.12)",
+                          border: "1px solid oklch(0.577 0.245 27.325 / 0.3)",
+                          fontFamily:
+                            "'Plus Jakarta Sans', system-ui, sans-serif",
+                          fontSize: "0.75rem",
+                          color: "oklch(0.75 0.15 27.325)",
+                        }}
+                      >
+                        ⚠ {cameraError.message}
+                      </div>
+                    )}
+
+                    {/* Scan button */}
+                    <button
+                      type="button"
+                      onClick={doScan}
+                      disabled={scanState === "scanning"}
+                      data-ocid="portfolio.primary_button"
+                      style={{
+                        width: "100%",
+                        padding: "12px",
+                        borderRadius: "12px",
+                        border: "none",
+                        background:
+                          scanState === "scanning"
+                            ? "oklch(0.42 0.13 152 / 0.5)"
+                            : "linear-gradient(135deg, oklch(0.42 0.13 152), oklch(0.32 0.11 152))",
+                        color: "white",
+                        fontFamily:
+                          "'Plus Jakarta Sans', system-ui, sans-serif",
+                        fontSize: "0.9rem",
+                        fontWeight: 700,
+                        cursor:
+                          scanState === "scanning" ? "not-allowed" : "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        transition: "transform 0.2s, box-shadow 0.2s",
+                        marginBottom: "1rem",
+                      }}
+                    >
+                      {scanState === "scanning" ? (
+                        <>
+                          <span
+                            style={{
+                              animation: "spin 1s linear infinite",
+                              display: "inline-block",
+                            }}
+                          >
+                            ⟳
+                          </span>
+                          Scanning...
+                        </>
+                      ) : (
+                        <>
+                          <QrCode size={16} />
+                          Scan Product Barcode
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/* ===== MANUAL BARCODE TAB ===== */}
+                {activeTab === "manual" && (
+                  <div style={{ marginBottom: "1rem" }}>
+                    <label
+                      htmlFor="mp-barcode-input"
+                      style={{
+                        fontFamily:
+                          "'Plus Jakarta Sans', system-ui, sans-serif",
+                        fontSize: "0.78rem",
+                        fontWeight: 600,
+                        color: "rgba(255,255,255,0.6)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        display: "block",
+                        marginBottom: "6px",
+                      }}
+                    >
+                      Barcode Number
                     </label>
                     <input
-                      id="mp-add-price"
-                      type="number"
-                      value={addForm.price}
-                      onChange={(e) =>
-                        setAddForm((f) => ({ ...f, price: e.target.value }))
-                      }
-                      placeholder="0.00"
+                      id="mp-barcode-input"
+                      type="text"
+                      value={barcodeInput}
+                      onChange={(e) => setBarcodeInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleBarcodeEntry();
+                      }}
+                      placeholder="e.g. 8901030814052"
                       data-ocid="portfolio.input"
-                      style={lightInputStyle}
+                      style={inputStyle}
                       onFocus={(e) => {
-                        e.target.style.borderColor = "oklch(0.42 0.13 152)";
+                        e.target.style.borderColor = "oklch(0.82 0.18 86)";
                         e.target.style.boxShadow =
-                          "0 0 0 3px oklch(0.42 0.13 152 / 0.12)";
+                          "0 0 0 3px oklch(0.82 0.18 86 / 0.15)";
                       }}
                       onBlur={(e) => {
-                        e.target.style.borderColor = "oklch(0.88 0.015 145)";
+                        e.target.style.borderColor =
+                          "oklch(0.42 0.13 152 / 0.4)";
                         e.target.style.boxShadow = "none";
                       }}
                     />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="mp-add-category"
+                    <p
                       style={{
                         fontFamily:
                           "'Plus Jakarta Sans', system-ui, sans-serif",
-                        fontSize: "0.74rem",
-                        fontWeight: 600,
-                        color: "oklch(0.45 0.02 260)",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.05em",
-                        display: "block",
-                        marginBottom: "5px",
+                        fontSize: "0.72rem",
+                        color: "rgba(255,255,255,0.35)",
+                        marginTop: "4px",
+                        marginBottom: "0.75rem",
                       }}
                     >
-                      Category
-                    </label>
-                    <select
-                      id="mp-add-category"
-                      value={addForm.category}
-                      onChange={(e) =>
-                        setAddForm((f) => ({ ...f, category: e.target.value }))
-                      }
-                      data-ocid="portfolio.select"
+                      Try: 8901030814052 · 8906063010012 · or any custom barcode
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleBarcodeEntry}
+                      data-ocid="portfolio.primary_button"
                       style={{
-                        ...lightInputStyle,
+                        width: "100%",
+                        padding: "12px",
+                        borderRadius: "12px",
+                        border: "none",
+                        background:
+                          "linear-gradient(135deg, oklch(0.42 0.13 152), oklch(0.32 0.11 152))",
+                        color: "white",
+                        fontFamily:
+                          "'Plus Jakarta Sans', system-ui, sans-serif",
+                        fontSize: "0.9rem",
+                        fontWeight: 700,
                         cursor: "pointer",
-                        appearance: "none",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        marginBottom: "1rem",
+                        transition: "transform 0.2s",
                       }}
-                      onFocus={(e) => {
-                        e.target.style.borderColor = "oklch(0.42 0.13 152)";
-                        e.target.style.boxShadow =
-                          "0 0 0 3px oklch(0.42 0.13 152 / 0.12)";
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.transform =
+                          "translateY(-2px)";
                       }}
-                      onBlur={(e) => {
-                        e.target.style.borderColor = "oklch(0.88 0.015 145)";
-                        e.target.style.boxShadow = "none";
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.transform =
+                          "translateY(0)";
                       }}
                     >
-                      {PRODUCT_CATEGORIES.map((cat) => (
-                        <option key={cat} value={cat}>
-                          {cat}
-                        </option>
-                      ))}
-                    </select>
+                      <QrCode size={16} />
+                      Look Up Barcode
+                    </button>
                   </div>
-                </div>
+                )}
 
-                {/* Barcode (pre-filled, editable) */}
-                <div style={{ marginBottom: "1rem" }}>
-                  <label
-                    htmlFor="mp-add-barcode"
+                {/* ===== PRODUCT DETAILS FORM (shown after scan/barcode entry) ===== */}
+                {(scanState === "ready" || addForm.barcode) && (
+                  <div
                     style={{
-                      fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-                      fontSize: "0.74rem",
-                      fontWeight: 600,
-                      color: "oklch(0.45 0.02 260)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.05em",
-                      display: "block",
-                      marginBottom: "5px",
+                      background: "white",
+                      borderRadius: "16px",
+                      padding: "1.25rem",
+                      border: "1.5px solid oklch(0.88 0.015 145)",
+                      animation: "slideInUp 0.3s ease-out",
                     }}
                   >
-                    Barcode
-                  </label>
-                  <input
-                    id="mp-add-barcode"
-                    type="text"
-                    value={addForm.barcode}
-                    onChange={(e) =>
-                      setAddForm((f) => ({ ...f, barcode: e.target.value }))
-                    }
-                    placeholder="Barcode number (optional)"
-                    data-ocid="portfolio.input"
-                    style={lightInputStyle}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = "oklch(0.42 0.13 152)";
-                      e.target.style.boxShadow =
-                        "0 0 0 3px oklch(0.42 0.13 152 / 0.12)";
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = "oklch(0.88 0.015 145)";
-                      e.target.style.boxShadow = "none";
-                    }}
-                  />
-                </div>
+                    <h4
+                      style={{
+                        fontFamily: "'Mona Sans', system-ui, sans-serif",
+                        fontSize: "0.95rem",
+                        fontWeight: 800,
+                        color: "oklch(0.16 0.07 152)",
+                        marginBottom: "1rem",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                      }}
+                    >
+                      <Package size={16} color="oklch(0.42 0.13 152)" />
+                      Product Details
+                    </h4>
 
-                {/* Action buttons */}
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button
-                    type="button"
-                    onClick={handleSaveToPortfolio}
-                    disabled={!addForm.name || !addForm.price}
-                    data-ocid="portfolio.save_button"
+                    {/* Product Name */}
+                    <div style={{ marginBottom: "0.75rem" }}>
+                      <label
+                        htmlFor="mp-add-name"
+                        style={{
+                          fontFamily:
+                            "'Plus Jakarta Sans', system-ui, sans-serif",
+                          fontSize: "0.74rem",
+                          fontWeight: 600,
+                          color: "oklch(0.45 0.02 260)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                          display: "block",
+                          marginBottom: "5px",
+                        }}
+                      >
+                        Product Name *
+                      </label>
+                      <input
+                        id="mp-add-name"
+                        type="text"
+                        value={addForm.name}
+                        onChange={(e) =>
+                          setAddForm((f) => ({ ...f, name: e.target.value }))
+                        }
+                        placeholder="e.g. Organic Honey 500g"
+                        data-ocid="portfolio.input"
+                        style={lightInputStyle}
+                        onFocus={(e) => {
+                          e.target.style.borderColor = "oklch(0.42 0.13 152)";
+                          e.target.style.boxShadow =
+                            "0 0 0 3px oklch(0.42 0.13 152 / 0.12)";
+                        }}
+                        onBlur={(e) => {
+                          e.target.style.borderColor = "oklch(0.88 0.015 145)";
+                          e.target.style.boxShadow = "none";
+                        }}
+                      />
+                    </div>
+
+                    {/* Price + Category */}
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: "10px",
+                        marginBottom: "0.75rem",
+                      }}
+                    >
+                      <div>
+                        <label
+                          htmlFor="mp-add-price"
+                          style={{
+                            fontFamily:
+                              "'Plus Jakarta Sans', system-ui, sans-serif",
+                            fontSize: "0.74rem",
+                            fontWeight: 600,
+                            color: "oklch(0.45 0.02 260)",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            display: "block",
+                            marginBottom: "5px",
+                          }}
+                        >
+                          Price ₹ *
+                        </label>
+                        <input
+                          id="mp-add-price"
+                          type="number"
+                          value={addForm.price}
+                          onChange={(e) =>
+                            setAddForm((f) => ({ ...f, price: e.target.value }))
+                          }
+                          placeholder="0.00"
+                          data-ocid="portfolio.input"
+                          style={lightInputStyle}
+                          onFocus={(e) => {
+                            e.target.style.borderColor = "oklch(0.42 0.13 152)";
+                            e.target.style.boxShadow =
+                              "0 0 0 3px oklch(0.42 0.13 152 / 0.12)";
+                          }}
+                          onBlur={(e) => {
+                            e.target.style.borderColor =
+                              "oklch(0.88 0.015 145)";
+                            e.target.style.boxShadow = "none";
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label
+                          htmlFor="mp-add-category"
+                          style={{
+                            fontFamily:
+                              "'Plus Jakarta Sans', system-ui, sans-serif",
+                            fontSize: "0.74rem",
+                            fontWeight: 600,
+                            color: "oklch(0.45 0.02 260)",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            display: "block",
+                            marginBottom: "5px",
+                          }}
+                        >
+                          Category
+                        </label>
+                        <select
+                          id="mp-add-category"
+                          value={addForm.category}
+                          onChange={(e) =>
+                            setAddForm((f) => ({
+                              ...f,
+                              category: e.target.value,
+                            }))
+                          }
+                          data-ocid="portfolio.select"
+                          style={{
+                            ...lightInputStyle,
+                            cursor: "pointer",
+                            appearance: "none",
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.borderColor = "oklch(0.42 0.13 152)";
+                            e.target.style.boxShadow =
+                              "0 0 0 3px oklch(0.42 0.13 152 / 0.12)";
+                          }}
+                          onBlur={(e) => {
+                            e.target.style.borderColor =
+                              "oklch(0.88 0.015 145)";
+                            e.target.style.boxShadow = "none";
+                          }}
+                        >
+                          {PRODUCT_CATEGORIES.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Barcode (pre-filled, editable) */}
+                    <div style={{ marginBottom: "1rem" }}>
+                      <label
+                        htmlFor="mp-add-barcode"
+                        style={{
+                          fontFamily:
+                            "'Plus Jakarta Sans', system-ui, sans-serif",
+                          fontSize: "0.74rem",
+                          fontWeight: 600,
+                          color: "oklch(0.45 0.02 260)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                          display: "block",
+                          marginBottom: "5px",
+                        }}
+                      >
+                        Barcode
+                      </label>
+                      <input
+                        id="mp-add-barcode"
+                        type="text"
+                        value={addForm.barcode}
+                        onChange={(e) =>
+                          setAddForm((f) => ({ ...f, barcode: e.target.value }))
+                        }
+                        placeholder="Barcode number (optional)"
+                        data-ocid="portfolio.input"
+                        style={lightInputStyle}
+                        onFocus={(e) => {
+                          e.target.style.borderColor = "oklch(0.42 0.13 152)";
+                          e.target.style.boxShadow =
+                            "0 0 0 3px oklch(0.42 0.13 152 / 0.12)";
+                        }}
+                        onBlur={(e) => {
+                          e.target.style.borderColor = "oklch(0.88 0.015 145)";
+                          e.target.style.boxShadow = "none";
+                        }}
+                      />
+                    </div>
+
+                    {/* Action buttons */}
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <button
+                        type="button"
+                        onClick={handleSaveToPortfolio}
+                        disabled={!addForm.name || !addForm.price}
+                        data-ocid="portfolio.save_button"
+                        style={{
+                          flex: 1,
+                          padding: "11px",
+                          borderRadius: "10px",
+                          border: "none",
+                          background:
+                            !addForm.name || !addForm.price
+                              ? "oklch(0.75 0.015 145)"
+                              : "linear-gradient(135deg, oklch(0.42 0.13 152), oklch(0.32 0.11 152))",
+                          color:
+                            !addForm.name || !addForm.price
+                              ? "oklch(0.55 0.01 145)"
+                              : "white",
+                          fontFamily:
+                            "'Plus Jakarta Sans', system-ui, sans-serif",
+                          fontSize: "0.82rem",
+                          fontWeight: 700,
+                          cursor:
+                            !addForm.name || !addForm.price
+                              ? "not-allowed"
+                              : "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: "5px",
+                          transition: "transform 0.2s",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (addForm.name && addForm.price) {
+                            (
+                              e.currentTarget as HTMLButtonElement
+                            ).style.transform = "translateY(-2px)";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          (
+                            e.currentTarget as HTMLButtonElement
+                          ).style.transform = "translateY(0)";
+                        }}
+                      >
+                        <Save size={14} />
+                        Save to Portfolio
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveAndAddToCart}
+                        disabled={!addForm.name || !addForm.price}
+                        data-ocid="portfolio.add_button"
+                        style={{
+                          flex: 1,
+                          padding: "11px",
+                          borderRadius: "10px",
+                          border: "none",
+                          background:
+                            !addForm.name || !addForm.price
+                              ? "oklch(0.75 0.015 145)"
+                              : "oklch(0.82 0.18 86)",
+                          color:
+                            !addForm.name || !addForm.price
+                              ? "oklch(0.55 0.01 145)"
+                              : "oklch(0.16 0.07 152)",
+                          fontFamily:
+                            "'Plus Jakarta Sans', system-ui, sans-serif",
+                          fontSize: "0.82rem",
+                          fontWeight: 700,
+                          cursor:
+                            !addForm.name || !addForm.price
+                              ? "not-allowed"
+                              : "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: "5px",
+                          transition: "transform 0.2s",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (addForm.name && addForm.price) {
+                            (
+                              e.currentTarget as HTMLButtonElement
+                            ).style.transform = "translateY(-2px)";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          (
+                            e.currentTarget as HTMLButtonElement
+                          ).style.transform = "translateY(0)";
+                        }}
+                      >
+                        <ShoppingCart size={14} />
+                        Save &amp; Add Cart
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Prompt when idle */}
+                {scanState === "idle" && !addForm.barcode && (
+                  <div
                     style={{
-                      flex: 1,
-                      padding: "11px",
-                      borderRadius: "10px",
-                      border: "none",
-                      background:
-                        !addForm.name || !addForm.price
-                          ? "oklch(0.75 0.015 145)"
-                          : "linear-gradient(135deg, oklch(0.42 0.13 152), oklch(0.32 0.11 152))",
-                      color:
-                        !addForm.name || !addForm.price
-                          ? "oklch(0.55 0.01 145)"
-                          : "white",
-                      fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-                      fontSize: "0.82rem",
-                      fontWeight: 700,
-                      cursor:
-                        !addForm.name || !addForm.price
-                          ? "not-allowed"
-                          : "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "5px",
-                      transition: "transform 0.2s",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (addForm.name && addForm.price) {
-                        (e.currentTarget as HTMLButtonElement).style.transform =
-                          "translateY(-2px)";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLButtonElement).style.transform =
-                        "translateY(0)";
+                      marginTop: "1rem",
+                      padding: "14px",
+                      borderRadius: "12px",
+                      border: "1px dashed oklch(0.42 0.13 152 / 0.35)",
+                      background: "oklch(0.42 0.13 152 / 0.06)",
+                      textAlign: "center",
                     }}
                   >
-                    <Save size={14} />
-                    Save to Portfolio
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveAndAddToCart}
-                    disabled={!addForm.name || !addForm.price}
-                    data-ocid="portfolio.add_button"
-                    style={{
-                      flex: 1,
-                      padding: "11px",
-                      borderRadius: "10px",
-                      border: "none",
-                      background:
-                        !addForm.name || !addForm.price
-                          ? "oklch(0.75 0.015 145)"
-                          : "oklch(0.82 0.18 86)",
-                      color:
-                        !addForm.name || !addForm.price
-                          ? "oklch(0.55 0.01 145)"
-                          : "oklch(0.16 0.07 152)",
-                      fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-                      fontSize: "0.82rem",
-                      fontWeight: 700,
-                      cursor:
-                        !addForm.name || !addForm.price
-                          ? "not-allowed"
-                          : "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "5px",
-                      transition: "transform 0.2s",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (addForm.name && addForm.price) {
-                        (e.currentTarget as HTMLButtonElement).style.transform =
-                          "translateY(-2px)";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLButtonElement).style.transform =
-                        "translateY(0)";
-                    }}
-                  >
-                    <ShoppingCart size={14} />
-                    Save &amp; Add Cart
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Prompt when idle */}
-            {scanState === "idle" && !addForm.barcode && (
-              <div
-                style={{
-                  marginTop: "1rem",
-                  padding: "14px",
-                  borderRadius: "12px",
-                  border: "1px dashed oklch(0.42 0.13 152 / 0.35)",
-                  background: "oklch(0.42 0.13 152 / 0.06)",
-                  textAlign: "center",
-                }}
-              >
-                <p
-                  style={{
-                    fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-                    fontSize: "0.82rem",
-                    color: "rgba(255,255,255,0.45)",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {activeTab === "camera"
-                    ? "Start camera and click Scan, or click Scan Product Barcode for demo scan"
-                    : "Enter a barcode number above and click Look Up Barcode"}
-                </p>
-              </div>
+                    <p
+                      style={{
+                        fontFamily:
+                          "'Plus Jakarta Sans', system-ui, sans-serif",
+                        fontSize: "0.82rem",
+                        color: "rgba(255,255,255,0.45)",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      {activeTab === "camera"
+                        ? "Start camera and click Scan, or click Scan Product Barcode for demo scan"
+                        : "Enter a barcode number above and click Look Up Barcode"}
+                    </p>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -3138,8 +3935,11 @@ function PaymentCheckoutSection({
   const [cvv, setCvv] = useState("");
   const [cardName, setCardName] = useState("");
   const [paymentDone, setPaymentDone] = useState(false);
+  const [showBill, setShowBill] = useState(false);
   const [receiptNo] = useState(() => `DMT-${Date.now().toString().slice(-8)}`);
   const [paymentTime] = useState(() => new Date());
+  // Snapshot of cart at payment time so bill still shows after cart clears
+  const [paidCartSnapshot, setPaidCartSnapshot] = useState<CartState>({});
 
   const cartItems = Object.values(cart);
   const subtotal = cartItems.reduce(
@@ -3171,8 +3971,9 @@ function PaymentCheckoutSection({
   }, []);
 
   const handlePay = () => {
+    setPaidCartSnapshot(cart);
     setPaymentDone(true);
-    onPaymentComplete();
+    // Cart is cleared when user dismisses the success screen (after seeing the bill)
   };
 
   const methodButtons: {
@@ -4453,6 +5254,362 @@ function PaymentCheckoutSection({
         `}</style>
       </section>
 
+      {/* Digital Bill Modal */}
+      {showBill && (
+        <div
+          data-ocid="checkout.bill_modal"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 10001,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "1rem",
+            overflowY: "auto",
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowBill(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setShowBill(false);
+          }}
+          role="presentation"
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "20px",
+              padding: "0",
+              maxWidth: "440px",
+              width: "100%",
+              boxShadow: "0 40px 80px rgba(0,0,0,0.35)",
+              border: "1.5px solid oklch(0.88 0.015 145)",
+              overflow: "hidden",
+              animation: "slideInUp 0.3s ease-out",
+            }}
+          >
+            {/* Bill header */}
+            <div
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.42 0.13 152), oklch(0.32 0.11 152))",
+                padding: "1.5rem 1.75rem",
+                textAlign: "center",
+                position: "relative",
+              }}
+            >
+              <img
+                src="/assets/uploads/image-1.png"
+                alt="DMart"
+                style={{
+                  height: "32px",
+                  objectFit: "contain",
+                  marginBottom: "0.5rem",
+                  display: "block",
+                  margin: "0 auto 0.5rem",
+                }}
+              />
+              <p
+                style={{
+                  fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                  fontSize: "0.75rem",
+                  color: "rgba(255,255,255,0.7)",
+                  margin: 0,
+                }}
+              >
+                Crystal Mall Smart Cart — Digital Receipt
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowBill(false)}
+                data-ocid="checkout.bill_close_button"
+                style={{
+                  position: "absolute",
+                  top: "12px",
+                  right: "14px",
+                  background: "oklch(1 0 0 / 0.15)",
+                  border: "none",
+                  borderRadius: "50%",
+                  width: "30px",
+                  height: "30px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  color: "white",
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Bill meta */}
+            <div
+              style={{
+                padding: "1rem 1.75rem 0.5rem",
+                borderBottom: "1.5px dashed oklch(0.88 0.015 145)",
+                display: "flex",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "6px",
+              }}
+            >
+              {[
+                { label: "Receipt No", value: receiptNo },
+                {
+                  label: "Date & Time",
+                  value: paymentTime.toLocaleString("en-IN"),
+                },
+                {
+                  label: "Payment Method",
+                  value:
+                    selectedMethod === "upi"
+                      ? "UPI"
+                      : selectedMethod === "card"
+                        ? "Card"
+                        : "Cash",
+                },
+              ].map((row) => (
+                <div key={row.label} style={{ minWidth: "45%" }}>
+                  <div
+                    style={{
+                      fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                      fontSize: "0.68rem",
+                      color: "oklch(0.6 0.02 260)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      marginBottom: "2px",
+                    }}
+                  >
+                    {row.label}
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                      fontSize: "0.82rem",
+                      fontWeight: 700,
+                      color: "oklch(0.22 0.09 152)",
+                    }}
+                  >
+                    {row.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Items list */}
+            <div
+              style={{
+                padding: "0.75rem 1.75rem",
+                borderBottom: "1.5px dashed oklch(0.88 0.015 145)",
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                  fontSize: "0.72rem",
+                  color: "oklch(0.55 0.02 260)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  marginBottom: "0.6rem",
+                }}
+              >
+                Items
+              </div>
+              {Object.values(paidCartSnapshot).map((item) => {
+                const lineTotal = item.product.price * item.quantity;
+                return (
+                  <div
+                    key={item.product.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: "8px",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        flex: 1,
+                        minWidth: 0,
+                      }}
+                    >
+                      <span style={{ fontSize: "1.1rem", flexShrink: 0 }}>
+                        {item.product.icon}
+                      </span>
+                      <div style={{ minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontFamily:
+                              "'Plus Jakarta Sans', system-ui, sans-serif",
+                            fontSize: "0.82rem",
+                            fontWeight: 600,
+                            color: "oklch(0.16 0.07 152)",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {item.product.name}
+                        </div>
+                        <div
+                          style={{
+                            fontFamily:
+                              "'Plus Jakarta Sans', system-ui, sans-serif",
+                            fontSize: "0.7rem",
+                            color: "oklch(0.55 0.02 260)",
+                          }}
+                        >
+                          {formatCurrency(item.product.price)} × {item.quantity}
+                        </div>
+                      </div>
+                    </div>
+                    <span
+                      style={{
+                        fontFamily: "'Mona Sans', system-ui, sans-serif",
+                        fontSize: "0.88rem",
+                        fontWeight: 800,
+                        color: "oklch(0.32 0.11 152)",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {formatCurrency(lineTotal)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Price breakdown */}
+            {(() => {
+              const snapItems = Object.values(paidCartSnapshot);
+              const snapSubtotal = snapItems.reduce(
+                (s, i) => s + i.product.price * i.quantity,
+                0,
+              );
+              const snapGst = snapSubtotal * 0.18;
+              const snapTotal = snapSubtotal + snapGst;
+              return (
+                <div style={{ padding: "0.75rem 1.75rem 1.5rem" }}>
+                  {[
+                    {
+                      label: "Subtotal (before GST)",
+                      value: formatCurrency(snapSubtotal),
+                      muted: true,
+                    },
+                    {
+                      label: "GST (18%)",
+                      value: `+${formatCurrency(snapGst)}`,
+                      muted: true,
+                      accent: true,
+                    },
+                  ].map((row) => (
+                    <div
+                      key={row.label}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        marginBottom: "6px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily:
+                            "'Plus Jakarta Sans', system-ui, sans-serif",
+                          fontSize: "0.82rem",
+                          color: "oklch(0.45 0.02 260)",
+                        }}
+                      >
+                        {row.label}
+                      </span>
+                      <span
+                        style={{
+                          fontFamily:
+                            "'Plus Jakarta Sans', system-ui, sans-serif",
+                          fontSize: "0.82rem",
+                          fontWeight: 600,
+                          color: row.accent
+                            ? "oklch(0.577 0.245 27.325)"
+                            : "oklch(0.45 0.02 260)",
+                        }}
+                      >
+                        {row.value}
+                      </span>
+                    </div>
+                  ))}
+                  <div
+                    style={{
+                      marginTop: "0.75rem",
+                      background: "oklch(0.42 0.13 152 / 0.07)",
+                      border: "2px solid oklch(0.42 0.13 152 / 0.2)",
+                      borderRadius: "12px",
+                      padding: "0.85rem 1rem",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div>
+                      <div
+                        style={{
+                          fontFamily:
+                            "'Plus Jakarta Sans', system-ui, sans-serif",
+                          fontSize: "0.72rem",
+                          color: "oklch(0.45 0.02 260)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.06em",
+                        }}
+                      >
+                        Grand Total
+                      </div>
+                      <div
+                        style={{
+                          fontFamily:
+                            "'Plus Jakarta Sans', system-ui, sans-serif",
+                          fontSize: "0.65rem",
+                          color: "oklch(0.6 0.02 260)",
+                        }}
+                      >
+                        Subtotal + GST
+                      </div>
+                    </div>
+                    <span
+                      style={{
+                        fontFamily: "'Mona Sans', system-ui, sans-serif",
+                        fontSize: "1.6rem",
+                        fontWeight: 900,
+                        color: "oklch(0.35 0.13 152)",
+                        letterSpacing: "-0.02em",
+                      }}
+                    >
+                      {formatCurrency(snapTotal)}
+                    </span>
+                  </div>
+                  <div style={{ textAlign: "center", marginTop: "1rem" }}>
+                    <span
+                      style={{
+                        fontFamily:
+                          "'Plus Jakarta Sans', system-ui, sans-serif",
+                        fontSize: "0.72rem",
+                        color: "oklch(0.55 0.02 260)",
+                      }}
+                    >
+                      ✅ Payment Complete — Thank you for shopping at DMart!
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
       {/* Payment Success Overlay */}
       {paymentDone && (
         <div
@@ -4661,7 +5818,12 @@ function PaymentCheckoutSection({
                     color: "oklch(0.32 0.11 152)",
                   }}
                 >
-                  {formatCurrency(grandTotal)}
+                  {formatCurrency(
+                    Object.values(paidCartSnapshot).reduce(
+                      (s, i) => s + i.product.price * i.quantity,
+                      0,
+                    ) * 1.18,
+                  )}
                 </span>
               </div>
             </div>
@@ -4692,9 +5854,51 @@ function PaymentCheckoutSection({
               </span>
             </div>
 
+            {/* View Bill button */}
             <button
               type="button"
-              onClick={() => setPaymentDone(false)}
+              onClick={() => setShowBill(true)}
+              data-ocid="checkout.view_bill_button"
+              style={{
+                width: "100%",
+                background: "oklch(0.82 0.18 86)",
+                color: "oklch(0.16 0.07 152)",
+                border: "none",
+                borderRadius: "12px",
+                padding: "15px",
+                fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                fontSize: "1rem",
+                fontWeight: 700,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                marginBottom: "10px",
+                transition: "transform 0.2s, box-shadow 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.transform =
+                  "translateY(-2px)";
+                (e.currentTarget as HTMLButtonElement).style.boxShadow =
+                  "0 10px 28px oklch(0.82 0.18 86 / 0.4)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.transform =
+                  "translateY(0)";
+                (e.currentTarget as HTMLButtonElement).style.boxShadow = "none";
+              }}
+            >
+              <Receipt size={18} />
+              View Digital Bill
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setPaymentDone(false);
+                onPaymentComplete();
+              }}
               data-ocid="checkout.success_close_button"
               style={{
                 width: "100%",
@@ -5434,6 +6638,16 @@ export default function App() {
     };
   }, [mobileOpen]);
 
+  const totalCartItems = Object.values(sharedCart).reduce(
+    (sum, item) => sum + item.quantity,
+    0,
+  );
+
+  const scrollToCheckout = () => {
+    const el = document.querySelector("#checkout");
+    if (el) el.scrollIntoView({ behavior: "smooth" });
+  };
+
   return (
     <div style={{ minHeight: "100vh" }}>
       {/* Meta tags */}
@@ -5457,12 +6671,94 @@ export default function App() {
         />
         <PaymentCheckoutSection
           cart={sharedCart}
-          onPaymentComplete={() => {}}
+          onPaymentComplete={() => setSharedCart({})}
         />
         <BenefitsSection />
         <TeamSection />
       </main>
       <Footer />
+
+      {/* Floating Cart Button */}
+      {totalCartItems > 0 && (
+        <button
+          type="button"
+          onClick={scrollToCheckout}
+          data-ocid="cart.floating_button"
+          style={{
+            position: "fixed",
+            bottom: "28px",
+            right: "28px",
+            zIndex: 9000,
+            background:
+              "linear-gradient(135deg, oklch(0.42 0.13 152), oklch(0.32 0.11 152))",
+            color: "white",
+            border: "2px solid oklch(0.55 0.15 152 / 0.6)",
+            borderRadius: "50px",
+            padding: "14px 22px",
+            fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+            fontSize: "0.9rem",
+            fontWeight: 700,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            boxShadow:
+              "0 8px 32px oklch(0.42 0.13 152 / 0.5), 0 2px 8px rgba(0,0,0,0.3)",
+            animation: "floatingCartPulse 2.5s ease-in-out infinite",
+            transition: "transform 0.2s, box-shadow 0.2s",
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.transform =
+              "translateY(-3px) scale(1.04)";
+            (e.currentTarget as HTMLButtonElement).style.boxShadow =
+              "0 16px 40px oklch(0.42 0.13 152 / 0.65), 0 4px 12px rgba(0,0,0,0.3)";
+            (e.currentTarget as HTMLButtonElement).style.animationPlayState =
+              "paused";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.transform =
+              "translateY(0) scale(1)";
+            (e.currentTarget as HTMLButtonElement).style.boxShadow =
+              "0 8px 32px oklch(0.42 0.13 152 / 0.5), 0 2px 8px rgba(0,0,0,0.3)";
+            (e.currentTarget as HTMLButtonElement).style.animationPlayState =
+              "running";
+          }}
+        >
+          <div style={{ position: "relative" }}>
+            <ShoppingCart size={20} />
+            {/* Badge count */}
+            <span
+              style={{
+                position: "absolute",
+                top: "-8px",
+                right: "-8px",
+                background: "oklch(0.82 0.18 86)",
+                color: "oklch(0.16 0.07 152)",
+                borderRadius: "50%",
+                width: "18px",
+                height: "18px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                fontSize: "0.65rem",
+                fontWeight: 800,
+                border: "1.5px solid oklch(0.42 0.13 152)",
+              }}
+            >
+              {totalCartItems > 9 ? "9+" : totalCartItems}
+            </span>
+          </div>
+          <span>Go to Checkout</span>
+        </button>
+      )}
+
+      <style>{`
+        @keyframes floatingCartPulse {
+          0%, 100% { transform: translateY(0); box-shadow: 0 8px 32px oklch(0.42 0.13 152 / 0.5), 0 2px 8px rgba(0,0,0,0.3); }
+          50% { transform: translateY(-4px); box-shadow: 0 14px 40px oklch(0.42 0.13 152 / 0.7), 0 4px 12px rgba(0,0,0,0.3); }
+        }
+      `}</style>
     </div>
   );
 }
