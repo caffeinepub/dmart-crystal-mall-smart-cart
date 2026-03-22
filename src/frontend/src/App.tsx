@@ -478,6 +478,8 @@ function HeroSection() {
       id="home"
       className="bg-hero-gradient"
       style={{
+        background:
+          "linear-gradient(135deg, oklch(0.18 0.09 152) 0%, oklch(0.25 0.11 152) 35%, oklch(0.32 0.13 152) 70%, oklch(0.22 0.10 152) 100%)",
         minHeight: "100vh",
         position: "relative",
         display: "flex",
