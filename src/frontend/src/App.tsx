@@ -210,8 +210,8 @@ const FEATURES = [
 const HOW_IT_WORKS_STEPS = [
   {
     emoji: "🛒",
-    title: "Grab a Smart Cart",
-    desc: "Pick up a DMart Smart Cart at the entrance. It comes pre-equipped with a barcode scanner and digital display.",
+    title: "Go to Checkout",
+    desc: "Head to the DMart Checkout system at the entrance. It comes pre-equipped with a barcode scanner and digital display.",
   },
   {
     emoji: "📷",
@@ -609,9 +609,7 @@ function HeroSection() {
             }}
           >
             Introducing{" "}
-            <strong style={{ color: "white", fontWeight: 700 }}>
-              DMart Crystal Mall Smart Cart
-            </strong>{" "}
+            <strong style={{ color: "white", fontWeight: 700 }}>Scanzo</strong>{" "}
             — a C2P (Concept to Practice) innovation that transforms how you
             shop. Scan, track, and pay, all from your cart.
           </p>
@@ -4048,7 +4046,7 @@ function PaymentCheckoutSection({
               }}
             >
               · Scan. Pay. Walk out. No queues, no waiting — powered by C2P
-              Smart Cart technology.
+              Checkout technology.
             </span>
           </div>
 
@@ -5319,7 +5317,7 @@ function PaymentCheckoutSection({
                   margin: 0,
                 }}
               >
-                Crystal Mall Smart Cart — Digital Receipt
+                Crystal Mall Checkout — Digital Receipt
               </p>
               <button
                 type="button"
@@ -6032,7 +6030,7 @@ function BenefitsSection() {
               lineHeight: 1.7,
             }}
           >
-            Smart Cart makes every shopping trip faster, smarter, and
+            DMart Checkout makes every shopping trip faster, smarter, and
             stress-free
           </p>
         </div>
@@ -6247,12 +6245,12 @@ function TeamSection() {
                 marginBottom: "1rem",
               }}
             >
-              DMart Crystal Mall Smart Cart is a{" "}
+              Scanzo is a{" "}
               <strong style={{ color: "oklch(0.82 0.18 86)" }}>
                 C2P (Concept to Practice)
               </strong>{" "}
               innovation project designed to modernize the retail checkout
-              experience at DMart Crystal Mall.
+              experience at Scanzo.
             </p>
             <p
               style={{
@@ -6408,8 +6406,8 @@ function Footer() {
                 maxWidth: "280px",
               }}
             >
-              A C2P smart retail checkout innovation for DMart Crystal Mall —
-              making shopping smarter, faster, and queue-free.
+              A C2P smart retail checkout innovation for Scanzo — making
+              shopping smarter, faster, and queue-free.
             </p>
             <span
               style={{
@@ -6506,7 +6504,7 @@ function Footer() {
               }}
             >
               {[
-                "DMart Crystal Mall",
+                "Scanzo",
                 "C2P Innovation System",
                 "Academic Year 2025-26",
                 "Smart Retail Technology",
@@ -6554,7 +6552,7 @@ function Footer() {
               color: "rgba(255,255,255,0.35)",
             }}
           >
-            © {year} DMart Crystal Mall Smart Cart. College Innovation Project.
+            © {year} Scanzo. College Innovation Project.
           </span>
           <span
             style={{
@@ -6651,7 +6649,7 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh" }}>
       {/* Meta tags */}
-      <title>DMart Crystal Mall Smart Cart — C2P Innovation</title>
+      <title>Scanzo — C2P Innovation</title>
 
       <Navbar
         scrolled={scrolled}
